@@ -3,7 +3,7 @@
 import http from 'node:http';
 import { URL } from 'node:url';
 
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 const PORT = Number(process.env.PORT || 3000);
 const DEFAULT_COURSEID = process.env.DEFAULT_COURSEID || '4';
 const DEFAULT_VOICE = process.env.VOICE || '1';
@@ -196,7 +196,7 @@ async function handleRpc(message) {
   switch (method) {
     case 'initialize':
       return jsonRpcResult(id, {
-        protocolVersion: '2024-11-05',
+        protocolVersion: '2025-03-26',
         capabilities: { tools: {} },
         serverInfo: { name: 'damirobot-mcp-http-server', version: VERSION }
       });
@@ -231,10 +231,12 @@ function sendJson(res, status, body) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, mcp-session-id'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, mcp-session-id',
+    'Mcp-Session-Id': 'dami-http-session'
   });
   res.end(payload);
 }
+
 
 async function readBody(req) {
   const chunks = [];
@@ -274,15 +276,23 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'GET' && path === '/sse') {
+    if (req.method === 'GET' && (path === '/sse' || path === '/mcp')) {
+      // Some MCP clients discover Streamable HTTP tools by opening GET /mcp
+      // as an SSE stream. Older clients may use /sse and then POST to /mcp.
       res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        'Mcp-Session-Id': 'dami-http-session'
       });
-      res.write(`event: endpoint\ndata: ${JSON.stringify({ url: '/mcp' })}\n\n`);
+      res.write(`event: endpoint\ndata: /mcp\n\n`);
       res.write(`event: ready\ndata: ${JSON.stringify({ ok: true, tools: tools.length })}\n\n`);
+      // Keep the SSE stream alive for proxies/clients that expect a persistent connection.
+      const keepalive = setInterval(() => {
+        try { res.write(`: keepalive ${Date.now()}\n\n`); } catch { clearInterval(keepalive); }
+      }, 25000);
+      req.on('close', () => clearInterval(keepalive));
       return;
     }
 

@@ -1,27 +1,20 @@
-# DAMI Robot MCP HTTP Server v0.1.0
+# DAMI Robot MCP HTTP Server v0.1.1
 
-Server adapter HTTP/Streamable HTTP để kết nối imcp/Xiaozhi với Moodle DAMI API.
+Server adapter HTTP/Streamable HTTP/SSE để kết nối imcp/Xiaozhi với Moodle DAMI API.
 
-## Chạy local
+## Điểm mới v0.1.1
 
-```bash
-cp .env.example .env
-npm install
-npm start
-```
-
-Test:
-
-```bash
-curl http://localhost:3000/health
-```
+- `/mcp` hỗ trợ `POST` JSON-RPC để gọi MCP.
+- `/mcp` cũng hỗ trợ `GET` dạng SSE để một số MCP client có thể discover schema.
+- `/sse` hỗ trợ SSE fallback.
+- Protocol version trả về `2025-03-26`.
+- Giữ đủ 11 tools, gồm `get_student_fulltest_history`.
 
 ## Deploy Render
 
-- Build Command: `npm install`
-- Start Command: `npm start`
+- Build Command: `yarn install` hoặc `npm install`
+- Start Command: `node src/server.js` hoặc `npm start`
 - Env:
-  - `PORT` = Render tự set, có thể không cần thêm
   - `VOICE=1`
   - `MOODLE_BASE_URL=https://elearning.anhngumsmy.com`
   - `MOODLE_API_TOKEN=TOKEN_MOODLE_CUA_BAN`
@@ -29,13 +22,9 @@ curl http://localhost:3000/health
   - `DEFAULT_COURSEID=4`
   - `REQUEST_TIMEOUT_MS=15000`
 
-## URL dùng trên imcp
+Không cần thêm `PORT` trên Render.
 
-Streamable HTTP:
-
-```text
-https://ten-app.onrender.com/mcp
-```
+## URL
 
 Health:
 
@@ -43,7 +32,19 @@ Health:
 https://ten-app.onrender.com/health
 ```
 
-## Tool có sẵn
+Streamable HTTP:
+
+```text
+https://ten-app.onrender.com/mcp
+```
+
+SSE fallback:
+
+```text
+https://ten-app.onrender.com/sse
+```
+
+## Tools
 
 - `test_connection`
 - `find_student`
@@ -56,7 +57,3 @@ https://ten-app.onrender.com/health
 - `get_student_goal_status`
 - `get_student_fulltest_history`
 - `get_course_risk_students`
-
-## Ghi chú an toàn
-
-Server này chỉ gọi API read-only của Moodle. Không chứa token trong code. Không sửa/xóa/đình chỉ/check-in/feed DAMI.
