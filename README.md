@@ -1,14 +1,23 @@
-# DAMI Robot MCP HTTP Server v0.1.1
+# DAMI Robot MCP HTTP Server v0.1.2
 
 Server adapter HTTP/Streamable HTTP/SSE để kết nối imcp/Xiaozhi với Moodle DAMI API.
 
-## Điểm mới v0.1.1
+## Điểm chính
 
 - `/mcp` hỗ trợ `POST` JSON-RPC để gọi MCP.
-- `/mcp` cũng hỗ trợ `GET` dạng SSE để một số MCP client có thể discover schema.
+- `/mcp` hỗ trợ `GET` dạng SSE để client discover schema.
 - `/sse` hỗ trợ SSE fallback.
-- Protocol version trả về `2025-03-26`.
 - Giữ đủ 11 tools, gồm `get_student_fulltest_history`.
+- Tất cả tool dữ liệu học viên đều có khóa `speakerId` bắt buộc trước khi gọi Moodle.
+
+## Speaker authorization gate
+
+- `speakerId` thiếu/null/không hợp lệ → từ chối.
+- Các giá trị rác như `null`, `undefined`, `unknown`, `anonymous`, `guest`, `none` → từ chối.
+- Chỉ đọc `params.speakerId` hoặc `_meta.speakerId`; không tin `arguments.speakerId`.
+- `ALLOWED_SPEAKER_IDS` để trống → chấp nhận mọi `speakerId` hợp lệ do Xiaozhi nhận diện.
+- Nếu cấu hình `ALLOWED_SPEAKER_IDS=id_1,id_2` → chỉ đúng các ID đó được phép.
+- `test_connection` không đọc dữ liệu học viên nên vẫn được phép chạy không cần speaker.
 
 ## Deploy Render
 
@@ -21,6 +30,7 @@ Server adapter HTTP/Streamable HTTP/SSE để kết nối imcp/Xiaozhi với Moo
   - `MOODLE_TOOL_ENDPOINT=https://elearning.anhngumsmy.com/local/damirobot_api/api/tool.php`
   - `DEFAULT_COURSEID=4`
   - `REQUEST_TIMEOUT_MS=15000`
+  - `ALLOWED_SPEAKER_IDS=` để trống nếu muốn tự động cho phép mọi diễn giả đã được Xiaozhi nhận diện
 
 Không cần thêm `PORT` trên Render.
 
