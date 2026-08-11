@@ -3,14 +3,41 @@
 import http from 'node:http';
 import { URL } from 'node:url';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 const PORT = Number(process.env.PORT || 3000);
 const DEFAULT_COURSEID = process.env.DEFAULT_COURSEID || '4';
 const DEFAULT_VOICE = process.env.VOICE || '1';
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 15000);
+const ALLOWED_SPEAKER_IDS = new Set(
+  String(process.env.ALLOWED_SPEAKER_IDS || '')
+    .split(',')
+    .map(normalizeSpeakerId)
+    .filter(Boolean)
+);
 
 function env(name, fallback = '') {
   return process.env[name] || fallback;
+}
+
+function normalizeSpeakerId(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  const id = String(value).trim();
+  if (!id || id.length > 256) return '';
+  if (/^(null|undefined|unknown|anonymous|guest|none)$/i.test(id)) return '';
+  return id;
+}
+
+function getSpeakerId(params = {}) {
+  return normalizeSpeakerId(params?.speakerId) || normalizeSpeakerId(params?._meta?.speakerId);
+}
+
+function authorizeSpeaker(params = {}) {
+  const speakerId = getSpeakerId(params);
+  if (!speakerId) return { ok: false, reason: 'speaker_unrecognized' };
+  if (ALLOWED_SPEAKER_IDS.size > 0 && !ALLOWED_SPEAKER_IDS.has(speakerId)) {
+    return { ok: false, reason: 'speaker_not_whitelisted' };
+  }
+  return { ok: true, reason: 'speaker_recognized' };
 }
 
 function getMoodleEndpoint() {
@@ -31,6 +58,14 @@ function jsonRpcError(id, code, message, data) {
   const error = { code, message };
   if (data !== undefined) error.data = data;
   return { jsonrpc: '2.0', id: id ?? null, error };
+}
+
+function deniedToolResult(id) {
+  return jsonRpcResult(id, {
+    content: [{ type: 'text', text: 'DAMI không được phép truy cập dữ liệu học viên cho người chưa được cấp quyền ạ.' }],
+    structuredContent: { ok: false, error: 'speaker_not_authorized' },
+    isError: true,
+  });
 }
 
 const tools = [
@@ -212,6 +247,9 @@ async function handleRpc(message) {
       if (!tools.some((tool) => tool.name === name)) {
         return jsonRpcError(id, -32602, `Unknown tool: ${name}`);
       }
+      if (name !== 'test_connection' && !authorizeSpeaker(params).ok) {
+        return deniedToolResult(id);
+      }
       const data = await callMoodleTool(name, args);
       const text = data.reply_text || data.message || JSON.stringify(data, null, 2);
       return jsonRpcResult(id, {
@@ -236,7 +274,6 @@ function sendJson(res, status, body) {
   });
   res.end(payload);
 }
-
 
 async function readBody(req) {
   const chunks = [];
@@ -266,7 +303,8 @@ const server = http.createServer(async (req, res) => {
         name: 'damirobot-mcp-http-server',
         version: VERSION,
         mcp: '/mcp',
-        tools: tools.length
+        tools: tools.length,
+        speaker_guard: 'mandatory'
       });
       return;
     }
@@ -277,8 +315,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && (path === '/sse' || path === '/mcp')) {
-      // Some MCP clients discover Streamable HTTP tools by opening GET /mcp
-      // as an SSE stream. Older clients may use /sse and then POST to /mcp.
       res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
@@ -288,7 +324,6 @@ const server = http.createServer(async (req, res) => {
       });
       res.write(`event: endpoint\ndata: /mcp\n\n`);
       res.write(`event: ready\ndata: ${JSON.stringify({ ok: true, tools: tools.length })}\n\n`);
-      // Keep the SSE stream alive for proxies/clients that expect a persistent connection.
       const keepalive = setInterval(() => {
         try { res.write(`: keepalive ${Date.now()}\n\n`); } catch { clearInterval(keepalive); }
       }, 25000);
