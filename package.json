@@ -1,6 +1,6 @@
 {
   "name": "damirobot-mcp-http-server",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "DAMI Robot MCP Streamable HTTP adapter for Moodle DAMI API",
   "type": "module",
   "main": "src/server.js",
